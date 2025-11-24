@@ -10,22 +10,27 @@ import {
     StatusBar,
     Modal,
     ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Clipboard from '@react-native-clipboard/clipboard';
+import ApiService from '../../../services/ApiService';
+import { PAYMENT_GATEWAYS } from '../../../config/api.config';
 
 const PaymentScreen = ({ navigation, route }) => {
     const { amount } = route?.params || { amount: 1000 };
 
+    // Replace with your actual UPI ID
     const upiId = 'merchant@paytm';
-    const qrCodeImage = 'https://via.placeholder.com/300';
+    const qrCodeImage = 'https://via.placeholder.com/300'; // Replace with actual QR code URL
 
     const [utr, setUtr] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [currentStep, setCurrentStep] = useState(1);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [submittedUTR, setSubmittedUTR] = useState('');
+    const [selectedGateway, setSelectedGateway] = useState(PAYMENT_GATEWAYS.UPI);
 
     const copyToClipboard = (text) => {
         Clipboard.setString(text);
@@ -37,6 +42,7 @@ const PaymentScreen = ({ navigation, route }) => {
     };
 
     const handleSubmitUTR = async () => {
+        // Validation
         if (!utr.trim()) {
             Alert.alert('Required', 'Please enter UTR/Transaction ID');
             return;
@@ -49,16 +55,48 @@ const PaymentScreen = ({ navigation, route }) => {
 
         setIsSubmitting(true);
 
-        setTimeout(() => {
+        try {
+            console.log('📤 Submitting payment with UTR:', utr);
+
+            // ✅ Call backend API to submit payment
+            const response = await ApiService.addMoney(
+                amount,
+                utr.trim(),
+                selectedGateway,
+                'UPI'
+            );
+
+            if (response.success) {
+                console.log('✅ Payment submitted successfully');
+                setSubmittedUTR(utr);
+                setShowSuccessModal(true);
+            } else {
+                console.error('❌ Payment submission failed:', response.message);
+                Alert.alert(
+                    'Submission Failed',
+                    response.message || 'Failed to submit payment. Please try again.',
+                    [{ text: 'OK' }]
+                );
+            }
+        } catch (error) {
+            console.error('❌ Error submitting payment:', error);
+            Alert.alert(
+                'Error',
+                'An unexpected error occurred. Please try again.',
+                [{ text: 'OK' }]
+            );
+        } finally {
             setIsSubmitting(false);
-            setSubmittedUTR(utr);
-            setShowSuccessModal(true);
-        }, 2000);
+        }
     };
 
     const handleDoneSuccess = () => {
         setShowSuccessModal(false);
-        navigation.navigate('Home');
+        // Navigate to home and refresh wallet
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+        });
     };
 
     return (
@@ -160,6 +198,30 @@ const PaymentScreen = ({ navigation, route }) => {
                             </View>
                         </View>
 
+                        {/* Gateway Selection */}
+                        <View style={styles.gatewaySection}>
+                            <Text style={styles.sectionTitle}>Select Payment App Used</Text>
+                            <View style={styles.gatewayButtons}>
+                                {Object.entries(PAYMENT_GATEWAYS).map(([key, value]) => (
+                                    <TouchableOpacity
+                                        key={key}
+                                        style={[
+                                            styles.gatewayButton,
+                                            selectedGateway === value && styles.gatewayButtonSelected
+                                        ]}
+                                        onPress={() => setSelectedGateway(value)}
+                                        activeOpacity={0.7}>
+                                        <Text style={[
+                                            styles.gatewayText,
+                                            selectedGateway === value && styles.gatewayTextSelected
+                                        ]}>
+                                            {value}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+
                         <View style={styles.securityBadge}>
                             <Icon name="lock" size={16} color="#00C896" />
                             <Text style={styles.securityText}>
@@ -199,6 +261,7 @@ const PaymentScreen = ({ navigation, route }) => {
                                         autoCapitalize="characters"
                                         keyboardType="default"
                                         maxLength={20}
+                                        editable={!isSubmitting}
                                     />
                                     {utr.length > 0 && (
                                         <TouchableOpacity onPress={() => setUtr('')}>
@@ -271,7 +334,10 @@ const PaymentScreen = ({ navigation, route }) => {
                             disabled={!utr.trim() || utr.length < 12 || isSubmitting}
                             activeOpacity={0.8}>
                             {isSubmitting ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
+                                <>
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                    <Text style={styles.submitButtonText}>Submitting...</Text>
+                                </>
                             ) : (
                                 <>
                                     <Icon name="check-circle" size={20} color="#FFFFFF" />
@@ -294,18 +360,18 @@ const PaymentScreen = ({ navigation, route }) => {
                         {/* Success Animation */}
                         <View style={styles.successIconContainer}>
                             <View style={styles.successIconBackground}>
-                                <Icon name="check-circle" size={80} color="#12b00cff" />
+                                <Icon name="check-circle" size={80} color="#00C896" />
                             </View>
                         </View>
 
                         {/* Success Title */}
                         <Text style={styles.successTitle}>
-                            UTR Submitted Successfully! ✓
+                            Payment Submitted! ✓
                         </Text>
 
                         {/* Success Message */}
                         <Text style={styles.successMessage}>
-                            We've received your UTR. Our team will verify it shortly.
+                            We've received your payment request. Our team will verify it shortly.
                         </Text>
 
                         {/* UTR Display */}
@@ -322,7 +388,7 @@ const PaymentScreen = ({ navigation, route }) => {
                                 </View>
                                 <View style={styles.infoContent}>
                                     <Text style={styles.infoTitle}>Processing Time</Text>
-                                    <Text style={styles.infoText}>Up to 24 hours</Text>
+                                    <Text style={styles.infoText}>10-30 minutes</Text>
                                 </View>
                             </View>
 
@@ -332,7 +398,7 @@ const PaymentScreen = ({ navigation, route }) => {
                                 </View>
                                 <View style={styles.infoContent}>
                                     <Text style={styles.infoTitle}>Verification</Text>
-                                    <Text style={styles.infoText}>UTR matching in progress</Text>
+                                    <Text style={styles.infoText}>Manual verification in progress</Text>
                                 </View>
                             </View>
 
@@ -351,7 +417,7 @@ const PaymentScreen = ({ navigation, route }) => {
                         <View style={styles.noteBox}>
                             <Icon name="information-outline" size={16} color="#2196F3" />
                             <Text style={styles.noteText}>
-                                Once verified, your wallet will be credited automatically. We'll send you a notification.
+                                Once verified by our team, ₹{amount.toLocaleString('en-IN')} will be credited to your wallet automatically.
                             </Text>
                         </View>
 
@@ -613,6 +679,42 @@ const styles = StyleSheet.create({
         borderColor: '#00C896',
     },
 
+    // Gateway Selection
+    gatewaySection: {
+        marginHorizontal: 16,
+        marginBottom: 20,
+    },
+
+    gatewayButtons: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+    },
+
+    gatewayButton: {
+        backgroundColor: '#1A1A1A',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+    },
+
+    gatewayButtonSelected: {
+        backgroundColor: '#0D2B24',
+        borderColor: '#00C896',
+    },
+
+    gatewayText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#999999',
+    },
+
+    gatewayTextSelected: {
+        color: '#00C896',
+    },
+
     // UTR Section
     utrSection: {
         marginHorizontal: 16,
@@ -689,6 +791,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#FFFFFF',
         letterSpacing: 1,
+        padding: 0,
     },
 
     validationBox: {
@@ -860,22 +963,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 2,
-        borderColor: '#2fda0cff',
+        borderColor: '#00C896',
     },
 
     // Success Text
     successTitle: {
         fontSize: 18,
         fontWeight: '800',
-        color: '#3daf23ff',
+        color: '#00C896',
         marginBottom: 12,
         textAlign: 'center',
         letterSpacing: 0.5,
     },
 
     successMessage: {
-        fontSize: 12,
-        color: '#c9e4c7ff',
+        fontSize: 13,
+        color: '#999999',
         textAlign: 'center',
         marginBottom: 20,
         lineHeight: 20,
@@ -917,7 +1020,7 @@ const styles = StyleSheet.create({
     infoItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#0D2B24',
+        backgroundColor: '#0D0D0D',
         padding: 12,
         borderRadius: 12,
         borderWidth: 1,
@@ -966,7 +1069,7 @@ const styles = StyleSheet.create({
 
     noteText: {
         flex: 1,
-        fontSize: 12,
+        fontSize: 11,
         color: '#B3D9FF',
         lineHeight: 16,
         fontWeight: '500',

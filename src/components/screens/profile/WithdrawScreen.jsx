@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
     View,
     Text,
@@ -8,33 +8,39 @@ import {
     StatusBar,
     Modal,
     Animated,
-    TextInput,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useFocusEffect } from '@react-navigation/native';
+import ApiService from '../../../services/ApiService';
 
 const WithdrawScreen = ({ navigation, route }) => {
-    const walletBalance = route?.params?.walletBalance || 1250.35;
-
+    const [userData, setUserData] = useState(null);
     const [withdrawAmount, setWithdrawAmount] = useState('');
     const [selectedBank, setSelectedBank] = useState(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [transactionId, setTransactionId] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Animation refs
     const scaleAnim = useRef(new Animated.Value(0)).current;
     const successScaleAnim = useRef(new Animated.Value(0)).current;
     const checkmarkAnim = useRef(new Animated.Value(0)).current;
 
-    // Mock bank accounts
+    // Mock bank accounts (replace with actual API call later)
     const bankAccounts = [
         {
             id: '1',
             bankName: 'HDFC Bank',
             accountNumber: '****1234',
+            fullAccountNumber: '12345678901234',
+            accountHolderName: 'John Doe',
             accountType: 'Savings',
-            ifsc: 'HDFC0001234',
+            ifscCode: 'HDFC0001234',
             icon: 'bank',
             isPrimary: true,
         },
@@ -42,21 +48,41 @@ const WithdrawScreen = ({ navigation, route }) => {
             id: '2',
             bankName: 'ICICI Bank',
             accountNumber: '****5678',
+            fullAccountNumber: '98765432109876',
+            accountHolderName: 'John Doe',
             accountType: 'Current',
-            ifsc: 'ICIC0005678',
-            icon: 'bank',
-            isPrimary: false,
-        },
-        {
-            id: '3',
-            bankName: 'State Bank of India',
-            accountNumber: '****9012',
-            accountType: 'Savings',
-            ifsc: 'SBIN0009012',
+            ifscCode: 'ICIC0005678',
             icon: 'bank',
             isPrimary: false,
         },
     ];
+
+    // ✅ Fetch user profile and wallet balance
+    useFocusEffect(
+        useCallback(() => {
+            fetchUserData();
+        }, [])
+    );
+
+    const fetchUserData = async () => {
+        try {
+            console.log('👤 Fetching user data for withdrawal...');
+            const response = await ApiService.getUserProfile();
+
+            if (response.success) {
+                setUserData(response.data);
+                console.log('✅ Available balance:', response.data.walletBalance);
+            } else {
+                console.error('❌ Failed to fetch user data');
+                Alert.alert('Error', 'Failed to load wallet balance');
+            }
+        } catch (error) {
+            console.error('❌ Error fetching user data:', error);
+            Alert.alert('Error', 'Something went wrong');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleNumberPress = (num) => {
         if (withdrawAmount.length < 10) {
@@ -79,18 +105,16 @@ const WithdrawScreen = ({ navigation, route }) => {
     };
 
     const handleMaxAmount = () => {
-        setWithdrawAmount(walletBalance.toString());
+        const availableBalance = userData?.walletBalance || 0;
+        setWithdrawAmount(availableBalance.toString());
     };
 
-    const generateTransactionId = () => {
-        const timestamp = Date.now();
-        const random = Math.floor(Math.random() * 10000);
-        return `WD${timestamp}${random}`;
-    };
-
+    // ✅ Withdrawal calculations
+    const walletBalance = userData?.walletBalance || 0;
+    const bonusBalance = userData?.bonusBalance || 0;
     const enteredAmount = parseFloat(withdrawAmount) || 0;
     const minimumWithdrawal = 100;
-    const processingFee = enteredAmount > 0 ? Math.min(enteredAmount * 0.001, 10) : 0; // 0.1% fee, max ₹10
+    const processingFee = 0; // No processing fee as per backend
     const totalAmount = enteredAmount - processingFee;
     const remainingBalance = walletBalance - enteredAmount;
 
@@ -110,33 +134,73 @@ const WithdrawScreen = ({ navigation, route }) => {
         }
     };
 
-    const handleConfirmWithdraw = () => {
-        const txnId = generateTransactionId();
-        setTransactionId(txnId);
+    // ✅ Submit withdrawal request to backend
+    const handleConfirmWithdraw = async () => {
+        setIsSubmitting(true);
 
-        Animated.timing(scaleAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-        }).start(() => {
-            setShowConfirmModal(false);
-            setShowSuccessModal(true);
+        try {
+            console.log('📤 Submitting withdrawal request...');
 
-            Animated.sequence([
-                Animated.spring(successScaleAnim, {
-                    toValue: 1,
+            const withdrawalData = {
+                amount: enteredAmount,
+                accountNumber: selectedBank.fullAccountNumber,
+                ifscCode: selectedBank.ifscCode,
+                accountHolderName: selectedBank.accountHolderName,
+                bankName: selectedBank.bankName,
+            };
+
+            const response = await ApiService.withdrawMoney(enteredAmount, withdrawalData);
+
+            if (response.success) {
+                console.log('✅ Withdrawal request submitted successfully');
+
+                const txnId = response.data.transaction._id ||
+                    `WD${Date.now()}${Math.floor(Math.random() * 10000)}`;
+                setTransactionId(txnId);
+
+                Animated.timing(scaleAnim, {
+                    toValue: 0,
+                    duration: 200,
                     useNativeDriver: true,
-                    tension: 50,
-                    friction: 7,
-                }),
-                Animated.spring(checkmarkAnim, {
-                    toValue: 1,
-                    useNativeDriver: true,
-                    tension: 50,
-                    friction: 7,
-                }),
-            ]).start();
-        });
+                }).start(() => {
+                    setShowConfirmModal(false);
+                    setShowSuccessModal(true);
+
+                    Animated.sequence([
+                        Animated.spring(successScaleAnim, {
+                            toValue: 1,
+                            useNativeDriver: true,
+                            tension: 50,
+                            friction: 7,
+                        }),
+                        Animated.spring(checkmarkAnim, {
+                            toValue: 1,
+                            useNativeDriver: true,
+                            tension: 50,
+                            friction: 7,
+                        }),
+                    ]).start();
+                });
+            } else {
+                console.error('❌ Withdrawal failed:', response.message);
+                Alert.alert(
+                    'Withdrawal Failed',
+                    response.message || 'Unable to process withdrawal. Please try again.',
+                    [{ text: 'OK' }]
+                );
+                closeConfirmModal();
+            }
+        } catch (error) {
+            console.error('❌ Error submitting withdrawal:', error);
+            Alert.alert(
+                'Error',
+                'An unexpected error occurred. Please try again.',
+                [{ text: 'OK' }]
+            );
+            closeConfirmModal();
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const closeConfirmModal = () => {
@@ -154,7 +218,7 @@ const WithdrawScreen = ({ navigation, route }) => {
             useNativeDriver: true,
         }).start(() => {
             setShowSuccessModal(false);
-            navigation.goBack();
+            navigation.navigate('ProfileWallet'); // Navigate back to wallet
         });
     };
 
@@ -170,6 +234,15 @@ const WithdrawScreen = ({ navigation, route }) => {
             )}
         </TouchableOpacity>
     );
+
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#FF9800" />
+                <Text style={styles.loadingText}>Loading wallet...</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -200,7 +273,7 @@ const WithdrawScreen = ({ navigation, route }) => {
                             <Icon name="wallet" size={24} color="#FF9800" />
                         </View>
                         <View style={styles.balanceInfo}>
-                            <Text style={styles.balanceLabel}>Available Balance</Text>
+                            <Text style={styles.balanceLabel}>Withdrawable Balance</Text>
                             <Text style={styles.balanceValue}>
                                 ₹{walletBalance.toLocaleString('en-IN', {
                                     minimumFractionDigits: 2,
@@ -209,6 +282,16 @@ const WithdrawScreen = ({ navigation, route }) => {
                             </Text>
                         </View>
                     </View>
+
+                    {/* ✅ Show bonus balance info */}
+                    {bonusBalance > 0 && (
+                        <View style={styles.bonusInfoContainer}>
+                            <Icon name="information-outline" size={16} color="#FFD700" />
+                            <Text style={styles.bonusInfoText}>
+                                Bonus balance (₹{bonusBalance.toFixed(2)}) cannot be withdrawn
+                            </Text>
+                        </View>
+                    )}
 
                     {isBelowMinimum && (
                         <View style={styles.errorContainer}>
@@ -278,9 +361,9 @@ const WithdrawScreen = ({ navigation, route }) => {
                             </Text>
                         </View>
                         <View style={styles.amountHint}>
-                            <Icon name="bank" size={14} color="#999999" />
+                            <Icon name="clock-outline" size={14} color="#999999" />
                             <Text style={styles.amountHintText}>
-                                Processing Fee: ₹{processingFee.toFixed(2)}
+                                Processing: 1-3 days
                             </Text>
                         </View>
                     </View>
@@ -304,10 +387,10 @@ const WithdrawScreen = ({ navigation, route }) => {
                                     styles.bankIconContainer,
                                     selectedBank?.id === bank.id && styles.bankIconContainerSelected
                                 ]}>
-                                    <Icon 
-                                        name={bank.icon} 
-                                        size={24} 
-                                        color={selectedBank?.id === bank.id ? '#FF9800' : '#999999'} 
+                                    <Icon
+                                        name={bank.icon}
+                                        size={24}
+                                        color={selectedBank?.id === bank.id ? '#FF9800' : '#999999'}
                                     />
                                 </View>
                                 <View style={styles.bankInfo}>
@@ -322,7 +405,7 @@ const WithdrawScreen = ({ navigation, route }) => {
                                     <Text style={styles.accountNumber}>
                                         {bank.accountNumber} • {bank.accountType}
                                     </Text>
-                                    <Text style={styles.ifscCode}>IFSC: {bank.ifsc}</Text>
+                                    <Text style={styles.ifscCode}>IFSC: {bank.ifscCode}</Text>
                                 </View>
                             </View>
                             {selectedBank?.id === bank.id && (
@@ -333,7 +416,7 @@ const WithdrawScreen = ({ navigation, route }) => {
 
                     <TouchableOpacity
                         style={styles.addBankButton}
-                        onPress={() => navigation.navigate('AddBankAccount')}
+                        onPress={() => console.log('Add bank account coming soon')}
                         activeOpacity={0.8}>
                         <Icon name="plus-circle-outline" size={20} color="#00C896" />
                         <Text style={styles.addBankButtonText}>Add New Bank Account</Text>
@@ -349,13 +432,6 @@ const WithdrawScreen = ({ navigation, route }) => {
                             <View style={styles.summaryRow}>
                                 <Text style={styles.summaryLabel}>Withdrawal Amount</Text>
                                 <Text style={styles.summaryValue}>₹{enteredAmount.toFixed(2)}</Text>
-                            </View>
-
-                            <View style={styles.summaryDivider} />
-
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Processing Fee</Text>
-                                <Text style={styles.summaryValue}>-₹{processingFee.toFixed(2)}</Text>
                             </View>
 
                             <View style={styles.summaryDivider} />
@@ -380,7 +456,7 @@ const WithdrawScreen = ({ navigation, route }) => {
                         <View style={styles.infoCard}>
                             <Icon name="clock-outline" size={16} color="#FF9800" />
                             <Text style={styles.infoText}>
-                                Funds will be credited within 2-3 business days
+                                Funds will be credited within 1-3 business days after approval
                             </Text>
                         </View>
                     </View>
@@ -398,10 +474,10 @@ const WithdrawScreen = ({ navigation, route }) => {
                         activeOpacity={canWithdraw ? 0.8 : 1}
                         disabled={!canWithdraw}
                         onPress={handleWithdraw}>
-                        <Icon 
-                            name={canWithdraw ? "bank-transfer-out" : "alert-circle-outline"} 
-                            size={20} 
-                            color="#FFFFFF" 
+                        <Icon
+                            name={canWithdraw ? "bank-transfer-out" : "alert-circle-outline"}
+                            size={20}
+                            color="#FFFFFF"
                         />
                         <Text style={[
                             styles.withdrawButtonText,
@@ -501,15 +577,6 @@ const WithdrawScreen = ({ navigation, route }) => {
                             <View style={styles.modalDetailDivider} />
 
                             <View style={styles.modalDetailRow}>
-                                <Text style={styles.modalDetailLabel}>Processing Fee</Text>
-                                <Text style={styles.modalDetailValue}>
-                                    ₹{processingFee.toFixed(2)}
-                                </Text>
-                            </View>
-
-                            <View style={styles.modalDetailDivider} />
-
-                            <View style={styles.modalDetailRow}>
                                 <Text style={styles.modalDetailLabel}>You'll Receive</Text>
                                 <Text style={[styles.modalDetailValue, styles.modalDetailHighlight]}>
                                     ₹{totalAmount.toFixed(2)}
@@ -521,15 +588,26 @@ const WithdrawScreen = ({ navigation, route }) => {
                             <TouchableOpacity
                                 style={styles.modalCancelButton}
                                 onPress={closeConfirmModal}
+                                disabled={isSubmitting}
                                 activeOpacity={0.8}>
                                 <Text style={styles.modalCancelText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={styles.modalConfirmButton}
+                                style={[
+                                    styles.modalConfirmButton,
+                                    isSubmitting && styles.disabledButton
+                                ]}
                                 onPress={handleConfirmWithdraw}
+                                disabled={isSubmitting}
                                 activeOpacity={0.8}>
-                                <Icon name="check-circle" size={20} color="#FFFFFF" />
-                                <Text style={styles.modalConfirmText}>Confirm</Text>
+                                {isSubmitting ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <>
+                                        <Icon name="check-circle" size={20} color="#FFFFFF" />
+                                        <Text style={styles.modalConfirmText}>Confirm</Text>
+                                    </>
+                                )}
                             </TouchableOpacity>
                         </View>
                     </Animated.View>
@@ -556,9 +634,9 @@ const WithdrawScreen = ({ navigation, route }) => {
                             <Icon name="check-circle" size={80} color="#00C896" />
                         </Animated.View>
 
-                        <Text style={styles.successTitle}>Withdrawal Initiated!</Text>
+                        <Text style={styles.successTitle}>Withdrawal Requested!</Text>
                         <Text style={styles.successSubtitle}>
-                            Your withdrawal request has been submitted successfully
+                            Your withdrawal request has been submitted for admin approval
                         </Text>
 
                         <View style={styles.transactionIdContainer}>
@@ -591,7 +669,7 @@ const WithdrawScreen = ({ navigation, route }) => {
                                 <Icon name="clock-outline" size={20} color="#999999" />
                                 <View style={styles.successDetailInfo}>
                                     <Text style={styles.successDetailLabel}>Expected Time</Text>
-                                    <Text style={styles.successDetailValue}>2-3 business days</Text>
+                                    <Text style={styles.successDetailValue}>1-3 business days</Text>
                                 </View>
                             </View>
                         </View>
@@ -621,10 +699,25 @@ const WithdrawScreen = ({ navigation, route }) => {
     );
 };
 
+// Continue with your existing styles...
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000000',
+    },
+
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#000000',
+    },
+
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#999999',
+        fontWeight: '600',
     },
 
     safeAreaTop: {
@@ -705,6 +798,24 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#FFFFFF',
         letterSpacing: -0.5,
+    },
+
+    bonusInfoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 10,
+        marginBottom: 12,
+    },
+
+    bonusInfoText: {
+        flex: 1,
+        fontSize: 12,
+        color: '#FFD700',
+        fontWeight: '600',
+        marginLeft: 8,
     },
 
     errorContainer: {

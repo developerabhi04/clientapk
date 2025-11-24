@@ -1,7 +1,20 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    TouchableOpacity,
+    ScrollView,
+    StatusBar,
+    ActivityIndicator,
+    RefreshControl,
+    Alert
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useFocusEffect } from '@react-navigation/native';
+import ApiService from '../../../services/ApiService';
+import AuthStorage from '../../../services/AuthStorage';
 
 const settings = [
     { icon: 'account-outline', label: 'Profile', route: 'EditProfile' },
@@ -14,14 +27,67 @@ const settings = [
 ];
 
 export default function ProfileScreen({ navigation }) {
-    // Mock wallet balance - replace with actual data
-    const walletBalance = 1250.75;
+    const [userData, setUserData] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchUserProfile();
+        }, [])
+    );
+
+    const fetchUserProfile = async () => {
+        try {
+            console.log('👤 Fetching user profile...');
+            const response = await ApiService.getUserProfile();
+
+            if (response.success) {
+                setUserData(response.data);
+                console.log('✅ Profile fetched:', response.data);
+            } else {
+                console.error('❌ Failed to fetch profile:', response.message);
+                const cachedUser = await AuthStorage.getUser();
+                if (cachedUser) {
+                    setUserData(cachedUser);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error fetching profile:', error);
+            const cachedUser = await AuthStorage.getUser();
+            if (cachedUser) {
+                setUserData(cachedUser);
+            }
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchUserProfile();
+    };
 
     const handleLogout = () => {
-        navigation.reset({
-            index: 0,
-            routes: [{ name: 'Login' }],
-        });
+        Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Logout',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await ApiService.logout();
+                        navigation.reset({
+                            index: 0,
+                            routes: [{ name: 'Login' }],
+                        });
+                    },
+                },
+            ]
+        );
     };
 
     const handleNavigation = (route) => {
@@ -31,6 +97,19 @@ export default function ProfileScreen({ navigation }) {
             console.log(`Screen ${route} not implemented yet`);
         }
     };
+
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#00C896" />
+                <Text style={styles.loadingText}>Loading profile...</Text>
+            </View>
+        );
+    }
+
+    const walletBalance = userData?.walletBalance || 0;
+    const bonusBalance = userData?.bonusBalance || 0;
+    const totalBalance = walletBalance + bonusBalance;
 
     return (
         <View style={styles.container}>
@@ -43,19 +122,21 @@ export default function ProfileScreen({ navigation }) {
                         onPress={() => navigation.goBack()}>
                         <Icon name="arrow-left" size={24} color="#FFFFFF" />
                     </TouchableOpacity>
-                    {/* <TouchableOpacity style={styles.bellButton}>
-                        <Icon name="bell-outline" size={24} color="#FFFFFF" />
-                    </TouchableOpacity> */}
-                    {/* <TouchableOpacity style={styles.settingsButton}>
-                        <Icon name="cog-outline" size={24} color="#FFFFFF" />
-                    </TouchableOpacity> */}
                 </View>
             </SafeAreaView>
 
             <ScrollView
                 style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}>
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#00C896"
+                        colors={['#00C896']}
+                    />
+                }>
 
                 {/* Profile Section */}
                 <View style={styles.profileSection}>
@@ -64,8 +145,9 @@ export default function ProfileScreen({ navigation }) {
                             <Icon name="account" size={60} color="#FFFFFF" />
                         </View>
                     </View>
-                    <Text style={styles.userName}>John Doe</Text>
-
+                    <Text style={styles.userName}>
+                        {userData?.fullName || 'User'}
+                    </Text>
                 </View>
 
                 {/* Wallet Balance Section */}
@@ -81,7 +163,10 @@ export default function ProfileScreen({ navigation }) {
                             <View style={styles.walletInfo}>
                                 <Text style={styles.walletLabel}>Wallet Balance</Text>
                                 <Text style={styles.walletBalance}>
-                                    ₹{walletBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    ₹{totalBalance.toLocaleString('en-IN', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2
+                                    })}
                                 </Text>
                             </View>
                             <Icon name="chevron-right" size={24} color="#FFFFFF" />
@@ -129,6 +214,20 @@ const styles = StyleSheet.create({
         backgroundColor: '#000000',
     },
 
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#000000',
+    },
+
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#999999',
+        fontWeight: '600',
+    },
+
     safeArea: {
         backgroundColor: '#000000',
     },
@@ -148,22 +247,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
 
-    bellButton: {
-        width: 40,
-        height: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginLeft: 'auto',
-    },
-
-    settingsButton: {
-        width: 40,
-        height: 40,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginLeft: 8,
-    },
-
     scrollView: {
         flex: 1,
     },
@@ -172,7 +255,6 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
 
-    // Profile Section
     profileSection: {
         alignItems: 'center',
         paddingTop: 20,
@@ -203,17 +285,6 @@ const styles = StyleSheet.create({
         letterSpacing: 0.3,
     },
 
-    editPictureButton: {
-        paddingVertical: 8,
-    },
-
-    editPictureText: {
-        fontSize: 14,
-        color: '#FFFFFF',
-        fontWeight: '500',
-    },
-
-    // Wallet Balance Section
     walletSection: {
         marginBottom: 24,
         paddingHorizontal: 16,
@@ -280,7 +351,6 @@ const styles = StyleSheet.create({
         letterSpacing: 0.3,
     },
 
-    // Settings List
     settingsList: {
         paddingHorizontal: 16,
         marginBottom: 20,
@@ -303,7 +373,6 @@ const styles = StyleSheet.create({
         letterSpacing: 0.2,
     },
 
-    // Version Section
     versionSection: {
         paddingHorizontal: 16,
         paddingTop: 20,

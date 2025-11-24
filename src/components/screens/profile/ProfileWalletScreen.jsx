@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -6,98 +6,123 @@ import {
     TouchableOpacity,
     ScrollView,
     StatusBar,
+    ActivityIndicator,
+    RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useFocusEffect } from '@react-navigation/native';
+import ApiService from '../../../services/ApiService';
 
 const ProfileWalletScreen = ({ navigation }) => {
-    // Mock data - replace with actual data from your state/context
-    const walletBalance = 1250.35;
-    const cashBalance = 1250.35;
+    const [userData, setUserData] = useState(null);
+    const [transactions, setTransactions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-    // Mock transaction history with all types
-    const transactions = [
-        { 
-            id: '1', 
-            type: 'credit', 
-            category: 'add_money',
-            amount: 5000, 
-            date: '2025-11-07', 
-            time: '10:30 AM',
-            description: 'Added money via UPI',
-            icon: 'plus-circle',
-            color: '#00C896'
-        },
-        { 
-            id: '2', 
-            type: 'debit', 
-            category: 'withdrawal',
-            amount: 3000, 
-            date: '2025-11-06', 
-            time: '02:15 PM',
-            description: 'Withdrawal to bank',
-            icon: 'bank-transfer-out',
-            color: '#FF9800'
-        },
-        { 
-            id: '3', 
-            type: 'credit', 
-            category: 'dividend',
-            amount: 150, 
-            date: '2025-11-05', 
-            time: '11:45 AM',
-            description: 'Dividend received',
-            icon: 'gift',
-            color: '#9C27B0'
-        },
-        { 
-            id: '4', 
-            type: 'debit', 
-            category: 'stock_purchase',
-            amount: 2500, 
-            date: '2025-11-04', 
-            time: '04:20 PM',
-            description: 'Stock purchase - RELIANCE',
-            icon: 'cart',
-            color: '#2196F3'
-        },
-        { 
-            id: '5', 
-            type: 'credit', 
-            category: 'stock_sale',
-            amount: 3200, 
-            date: '2025-11-03', 
-            time: '09:00 AM',
-            description: 'Stock sale - TCS',
-            icon: 'cash-multiple',
-            color: '#00C896'
-        },
-        { 
-            id: '6', 
-            type: 'credit', 
-            category: 'add_money',
-            amount: 10000, 
-            date: '2025-11-02', 
-            time: '08:30 AM',
-            description: 'Added money via Card',
-            icon: 'plus-circle',
-            color: '#00C896'
-        },
-    ];
+    useFocusEffect(
+        useCallback(() => {
+            fetchWalletData();
+        }, [])
+    );
 
-    // Get transaction icon based on type
-    const getTransactionIcon = (transaction) => {
-        return {
-            icon: transaction.icon,
-            color: transaction.color,
-        };
+    const fetchWalletData = async () => {
+        try {
+            console.log('💰 Fetching wallet data...');
+
+            const profileResponse = await ApiService.getUserProfile();
+            
+            if (profileResponse.success) {
+                setUserData(profileResponse.data);
+                console.log('✅ Wallet Balance:', profileResponse.data.walletBalance);
+                console.log('✅ Bonus Balance:', profileResponse.data.bonusBalance);
+                console.log('✅ Total Balance:', profileResponse.data.totalBalance);
+            }
+
+            const transactionsResponse = await ApiService.getTransactions(1, 6);
+            
+            if (transactionsResponse.success) {
+                setTransactions(transactionsResponse.data || []);
+                console.log('✅ Transactions fetched:', transactionsResponse.data?.length || 0);
+            }
+
+        } catch (error) {
+            console.error('❌ Error fetching wallet data:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
     };
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchWalletData();
+    };
+
+    const getTransactionIcon = (transaction) => {
+        const iconMap = {
+            add_money: { icon: 'plus-circle', color: '#00C896' },
+            withdrawal: { icon: 'bank-transfer-out', color: '#FF9800' },
+            dividend: { icon: 'gift', color: '#9C27B0' },
+            trade_buy: { icon: 'cart', color: '#2196F3' },
+            trade_sell: { icon: 'cash-multiple', color: '#00C896' },
+            signup_bonus: { icon: 'gift', color: '#FFD700' },
+            profit: { icon: 'trending-up', color: '#00C896' },
+            loss: { icon: 'trending-down', color: '#FF5252' },
+            refund: { icon: 'refresh', color: '#2196F3' },
+            default: { icon: 'swap-horizontal', color: '#999999' },
+        };
+
+        return iconMap[transaction.category] || iconMap.default;
+    };
+
+    const getStatusColor = (status) => {
+        const colors = {
+            completed: '#00C896',
+            pending: '#FF9800',
+            failed: '#FF5252',
+            rejected: '#FF5252',
+            cancelled: '#999999',
+        };
+        return colors[status] || '#999999';
+    };
+
+    const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-IN', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    };
+
+    const formatTime = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#00C896" />
+                <Text style={styles.loadingText}>Loading wallet...</Text>
+            </View>
+        );
+    }
+
+    // ✅ Calculate balances with fallback
+    const walletBalance = userData?.walletBalance || 0;
+    const bonusBalance = userData?.bonusBalance || 0;
+    const totalBalance = walletBalance + bonusBalance;
 
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#000000" />
 
-            {/* Header */}
             <SafeAreaView edges={['top']} style={styles.safeAreaTop}>
                 <View style={styles.header}>
                     <TouchableOpacity
@@ -117,7 +142,15 @@ const ProfileWalletScreen = ({ navigation }) => {
             <ScrollView
                 style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}>
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#00C896"
+                        colors={['#00C896']}
+                    />
+                }>
 
                 {/* Main Balance Card */}
                 <View style={styles.mainBalanceCard}>
@@ -126,14 +159,40 @@ const ProfileWalletScreen = ({ navigation }) => {
                         <Text style={styles.balanceHeaderText}>Total Balance</Text>
                     </View>
                     <Text style={styles.mainBalanceValue}>
-                        ₹{Math.abs(walletBalance).toLocaleString('en-IN', {
+                        ₹{totalBalance.toLocaleString('en-IN', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2
                         })}
                     </Text>
+                    
+                    {/* ✅ Balance Breakdown */}
+                    <View style={styles.balanceBreakdownContainer}>
+                        <View style={styles.breakdownCard}>
+                            <Icon name="wallet" size={20} color="#00C896" />
+                            <View style={styles.breakdownInfo}>
+                                <Text style={styles.breakdownLabel}>Main Wallet</Text>
+                                <Text style={styles.breakdownValue}>
+                                    ₹{walletBalance.toFixed(2)}
+                                </Text>
+                            </View>
+                        </View>
+                        
+                        <View style={styles.breakdownDivider} />
+                        
+                        <View style={styles.breakdownCard}>
+                            <Icon name="gift" size={20} color="#FFD700" />
+                            <View style={styles.breakdownInfo}>
+                                <Text style={styles.breakdownLabel}>Bonus</Text>
+                                <Text style={[styles.breakdownValue, styles.bonusValue]}>
+                                    ₹{bonusBalance.toFixed(2)}
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+
                     <View style={styles.balanceTypeBadge}>
                         <Text style={styles.balanceTypeBadgeText}>
-                            Stocks, F&O balance
+                            Stocks Balance
                         </Text>
                     </View>
                 </View>
@@ -153,8 +212,10 @@ const ProfileWalletScreen = ({ navigation }) => {
                     {transactions.length > 0 ? (
                         transactions.map((transaction) => {
                             const iconData = getTransactionIcon(transaction);
+                            const statusColor = getStatusColor(transaction.status);
+                            
                             return (
-                                <View key={transaction.id} style={styles.transactionItem}>
+                                <View key={transaction._id || transaction.id} style={styles.transactionItem}>
                                     <View style={styles.transactionLeft}>
                                         <View style={[
                                             styles.transactionIcon,
@@ -167,16 +228,31 @@ const ProfileWalletScreen = ({ navigation }) => {
                                             />
                                         </View>
                                         <View style={styles.transactionInfo}>
-                                            <Text style={styles.transactionDescription}>
-                                                {transaction.description}
-                                            </Text>
+                                            <View style={styles.transactionTopRow}>
+                                                <Text style={styles.transactionDescription}>
+                                                    {transaction.description}
+                                                </Text>
+                                                {transaction.status !== 'completed' && (
+                                                    <View style={[
+                                                        styles.statusBadge,
+                                                        { backgroundColor: statusColor + '20' }
+                                                    ]}>
+                                                        <Text style={[
+                                                            styles.statusText,
+                                                            { color: statusColor }
+                                                        ]}>
+                                                            {transaction.status}
+                                                        </Text>
+                                                    </View>
+                                                )}
+                                            </View>
                                             <View style={styles.transactionMeta}>
                                                 <Text style={styles.transactionDate}>
-                                                    {transaction.date}
+                                                    {formatDate(transaction.createdAt)}
                                                 </Text>
                                                 <Text style={styles.transactionDot}>•</Text>
                                                 <Text style={styles.transactionTime}>
-                                                    {transaction.time}
+                                                    {formatTime(transaction.createdAt)}
                                                 </Text>
                                             </View>
                                         </View>
@@ -204,7 +280,6 @@ const ProfileWalletScreen = ({ navigation }) => {
                 </View>
             </ScrollView>
 
-            {/* Bottom Buttons */}
             <SafeAreaView edges={['bottom']} style={styles.safeAreaBottom}>
                 <View style={styles.bottomButtonsContainer}>
                     <TouchableOpacity
@@ -232,6 +307,20 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000000',
+    },
+
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#000000',
+    },
+
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#999999',
+        fontWeight: '600',
     },
 
     safeAreaTop: {
@@ -276,7 +365,6 @@ const styles = StyleSheet.create({
         paddingBottom: 30,
     },
 
-    // Main Balance Card
     mainBalanceCard: {
         backgroundColor: '#1A1A1A',
         marginHorizontal: 16,
@@ -307,7 +395,53 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         color: '#FFFFFF',
         letterSpacing: -2,
+        marginBottom: 16,
+    },
+
+    balanceBreakdownContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#0D2B24',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 12,
         marginBottom: 12,
+        gap: 12,
+        width: '100%',
+    },
+
+    breakdownCard: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+
+    breakdownInfo: {
+        flex: 1,
+    },
+
+    breakdownLabel: {
+        fontSize: 10,
+        color: '#999999',
+        marginBottom: 2,
+        fontWeight: '500',
+    },
+
+    breakdownValue: {
+        fontSize: 14,
+        color: '#FFFFFF',
+        fontWeight: '700',
+    },
+
+    bonusValue: {
+        color: '#FFD700',
+    },
+
+    breakdownDivider: {
+        width: 1,
+        height: 30,
+        backgroundColor: '#2A2A2A',
     },
 
     balanceTypeBadge: {
@@ -325,15 +459,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 
-    // Section Title
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#FFFFFF',
-        marginBottom: 12,
-    },
-
-    // Transactions Section
     transactionsSection: {
         marginHorizontal: 16,
     },
@@ -343,6 +468,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         marginBottom: 12,
+    },
+
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#FFFFFF',
     },
 
     viewAllText: {
@@ -382,11 +513,30 @@ const styles = StyleSheet.create({
         flex: 1,
     },
 
+    transactionTopRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+
     transactionDescription: {
         fontSize: 14,
         fontWeight: '600',
         color: '#FFFFFF',
-        marginBottom: 4,
+        flex: 1,
+    },
+
+    statusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+        marginLeft: 8,
+    },
+
+    statusText: {
+        fontSize: 10,
+        fontWeight: '700',
+        textTransform: 'uppercase',
     },
 
     transactionMeta: {
@@ -415,9 +565,9 @@ const styles = StyleSheet.create({
     transactionAmount: {
         fontSize: 16,
         fontWeight: '700',
+        marginLeft: 8,
     },
 
-    // Empty State
     emptyState: {
         alignItems: 'center',
         paddingVertical: 40,
@@ -437,7 +587,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
 
-    // Bottom Buttons
     safeAreaBottom: {
         backgroundColor: '#000000',
     },

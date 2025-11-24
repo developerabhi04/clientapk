@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -8,120 +8,139 @@ import {
     StatusBar,
     TextInput,
     FlatList,
+    ActivityIndicator,
+    RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-
-// Mock transaction data
-const MOCK_TRANSACTIONS = [
-    {
-        id: '1',
-        type: 'credit',
-        category: 'add_money',
-        amount: 500,
-        status: 'completed',
-        description: 'Added money via UPI',
-        date: '2025-11-07',
-        time: '10:30 AM',
-        utr: 'UTR432156789012',
-        paymentMethod: 'UPI',
-    },
-    {
-        id: '2',
-        type: 'debit',
-        category: 'stock_purchase',
-        amount: 2500,
-        status: 'completed',
-        description: 'Bought Reliance Industries',
-        stock: 'RELIANCE',
-        quantity: 10,
-        date: '2025-11-06',
-        time: '02:15 PM',
-    },
-    {
-        id: '3',
-        type: 'credit',
-        category: 'stock_sale',
-        amount: 3200,
-        status: 'completed',
-        description: 'Sold TCS',
-        stock: 'TCS',
-        quantity: 5,
-        date: '2025-11-05',
-        time: '11:45 AM',
-    },
-    {
-        id: '4',
-        type: 'debit',
-        category: 'withdrawal',
-        amount: 1000,
-        status: 'pending',
-        description: 'Withdrawal to bank',
-        date: '2025-11-04',
-        time: '04:20 PM',
-        bankName: 'HDFC Bank',
-    },
-    {
-        id: '5',
-        type: 'credit',
-        category: 'dividend',
-        amount: 150,
-        status: 'completed',
-        description: 'Dividend received',
-        stock: 'INFY',
-        date: '2025-11-03',
-        time: '09:00 AM',
-    },
-];
+import { useFocusEffect } from '@react-navigation/native';
+import ApiService from '../../../services/ApiService';
 
 const FILTER_OPTIONS = [
     { id: 'all', label: 'All', icon: 'view-grid' },
     { id: 'credit', label: 'Credit', icon: 'plus-circle' },
     { id: 'debit', label: 'Debit', icon: 'minus-circle' },
     { id: 'pending', label: 'Pending', icon: 'clock-outline' },
+    { id: 'withdrawal', label: 'Withdrawal', icon: 'bank-transfer-out' },
 ];
 
 const TransactionHistoryScreen = ({ navigation }) => {
     const [selectedFilter, setSelectedFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
+    const [transactions, setTransactions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-    // Filter transactions
-    const filteredTransactions = MOCK_TRANSACTIONS.filter((transaction) => {
+    // ✅ Fetch transactions on screen focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchTransactions();
+        }, [])
+    );
+
+    // ✅ Fetch transactions from backend
+    const fetchTransactions = async () => {
+        try {
+            console.log('📜 Fetching all transactions...');
+
+            // Fetch all transactions (no limit)
+            const response = await ApiService.getTransactions(1, 100);
+
+            if (response.success) {
+                console.log('✅ Transactions fetched:', response.data.length);
+                setTransactions(response.data);
+            } else {
+                console.error('❌ Failed to fetch transactions:', response.message);
+            }
+        } catch (error) {
+            console.error('❌ Error fetching transactions:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    // ✅ Pull to refresh
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchTransactions();
+    };
+
+    // ✅ Filter transactions based on selected filter and search query
+    const filteredTransactions = transactions.filter((transaction) => {
+        // Filter by type/status
         const matchesFilter =
             selectedFilter === 'all' ||
             (selectedFilter === 'credit' && transaction.type === 'credit') ||
             (selectedFilter === 'debit' && transaction.type === 'debit') ||
+            (selectedFilter === 'withdrawal' && transaction.type === 'withdrawal') ||
             (selectedFilter === 'pending' && transaction.status === 'pending');
 
+        // Filter by search query
         const matchesSearch =
             searchQuery === '' ||
-            transaction.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            transaction.utr?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            transaction.stock?.toLowerCase().includes(searchQuery.toLowerCase());
+            transaction.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            transaction.paymentDetails?.utrNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            transaction.tradeDetails?.stockSymbol?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            transaction.category?.toLowerCase().includes(searchQuery.toLowerCase());
 
         return matchesFilter && matchesSearch;
     });
 
-    // Get transaction icon and color
+    // ✅ Get transaction icon and color based on category
     const getTransactionIcon = (category) => {
-        switch (category) {
-            case 'add_money':
-                return { icon: 'plus-circle', color: '#00C896' };
-            case 'withdrawal':
-                return { icon: 'bank-transfer-out', color: '#FF9800' };
-            case 'stock_purchase':
-                return { icon: 'cart', color: '#2196F3' };
-            case 'stock_sale':
-                return { icon: 'cash-multiple', color: '#00C896' };
-            case 'dividend':
-                return { icon: 'gift', color: '#9C27B0' };
-            default:
-                return { icon: 'swap-horizontal', color: '#999999' };
-        }
+        const iconMap = {
+            add_money: { icon: 'plus-circle', color: '#00C896' },
+            withdrawal: { icon: 'bank-transfer-out', color: '#FF9800' },
+            trade_buy: { icon: 'cart', color: '#2196F3' },
+            trade_sell: { icon: 'cash-multiple', color: '#00C896' },
+            profit: { icon: 'trending-up', color: '#00C896' },
+            loss: { icon: 'trending-down', color: '#FF5252' },
+            dividend: { icon: 'gift', color: '#9C27B0' },
+            signup_bonus: { icon: 'gift', color: '#FFD700' },
+            refund: { icon: 'refresh', color: '#2196F3' },
+            default: { icon: 'swap-horizontal', color: '#999999' },
+        };
+
+        return iconMap[category] || iconMap.default;
     };
 
+    // ✅ Get status badge color
+    const getStatusColor = (status) => {
+        const colors = {
+            completed: '#00C896',
+            pending: '#FF9800',
+            failed: '#FF5252',
+            rejected: '#FF5252',
+            cancelled: '#999999',
+        };
+        return colors[status] || '#999999';
+    };
+
+    // ✅ Format date
+    const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-IN', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    };
+
+    // ✅ Format time
+    const formatTime = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    };
+
+    // ✅ Render transaction item
     const renderTransactionItem = ({ item }) => {
         const iconData = getTransactionIcon(item.category);
+        const statusColor = getStatusColor(item.status);
 
         return (
             <TouchableOpacity
@@ -137,16 +156,30 @@ const TransactionHistoryScreen = ({ navigation }) => {
                         <Icon name={iconData.icon} size={24} color={iconData.color} />
                     </View>
                     <View style={styles.transactionInfo}>
-                        <Text style={styles.transactionDescription}>{item.description}</Text>
+                        <Text style={styles.transactionDescription}>
+                            {item.description}
+                        </Text>
                         <View style={styles.transactionMeta}>
-                            <Text style={styles.transactionDate}>{item.date}</Text>
+                            <Text style={styles.transactionDate}>
+                                {formatDate(item.createdAt)}
+                            </Text>
                             <Text style={styles.transactionDot}>•</Text>
-                            <Text style={styles.transactionTime}>{item.time}</Text>
-                            {item.status === 'pending' && (
+                            <Text style={styles.transactionTime}>
+                                {formatTime(item.createdAt)}
+                            </Text>
+                            {item.status !== 'completed' && (
                                 <>
                                     <Text style={styles.transactionDot}>•</Text>
-                                    <View style={styles.pendingBadge}>
-                                        <Text style={styles.pendingText}>Pending</Text>
+                                    <View style={[
+                                        styles.statusBadge,
+                                        { backgroundColor: statusColor + '20' }
+                                    ]}>
+                                        <Text style={[
+                                            styles.statusText,
+                                            { color: statusColor }
+                                        ]}>
+                                            {item.status}
+                                        </Text>
                                     </View>
                                 </>
                             )}
@@ -169,6 +202,16 @@ const TransactionHistoryScreen = ({ navigation }) => {
         );
     };
 
+    // ✅ Show loading state
+    if (loading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#00C896" />
+                <Text style={styles.loadingText}>Loading transactions...</Text>
+            </View>
+        );
+    }
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#000000" />
@@ -182,7 +225,9 @@ const TransactionHistoryScreen = ({ navigation }) => {
                         <Icon name="arrow-left" size={24} color="#FFFFFF" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Transaction History</Text>
-                    <TouchableOpacity style={styles.downloadButton}>
+                    <TouchableOpacity
+                        style={styles.downloadButton}
+                        onPress={() => console.log('Download feature coming soon')}>
                         <Icon name="download" size={22} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
@@ -209,29 +254,56 @@ const TransactionHistoryScreen = ({ navigation }) => {
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.filterContainer}>
-                    {FILTER_OPTIONS.map((filter) => (
-                        <TouchableOpacity
-                            key={filter.id}
-                            style={[
-                                styles.filterTab,
-                                selectedFilter === filter.id && styles.filterTabActive,
-                            ]}
-                            onPress={() => setSelectedFilter(filter.id)}
-                            activeOpacity={0.7}>
-                            <Icon
-                                name={filter.icon}
-                                size={18}
-                                color={selectedFilter === filter.id ? '#00C896' : '#999999'}
-                            />
-                            <Text
+                    {FILTER_OPTIONS.map((filter) => {
+                        // ✅ Calculate count for each filter
+                        let count = 0;
+                        if (filter.id === 'all') {
+                            count = transactions.length;
+                        } else if (filter.id === 'credit') {
+                            count = transactions.filter(t => t.type === 'credit').length;
+                        } else if (filter.id === 'debit') {
+                            count = transactions.filter(t => t.type === 'debit').length;
+                        } else if (filter.id === 'pending') {
+                            count = transactions.filter(t => t.status === 'pending').length;
+                        } else if (filter.id === 'withdrawal') {
+                            count = transactions.filter(t => t.type === 'withdrawal').length;
+                        }
+                        return (
+                            <TouchableOpacity
+                                key={filter.id}
                                 style={[
-                                    styles.filterTabText,
-                                    selectedFilter === filter.id && styles.filterTabTextActive,
+                                    styles.filterTab,
+                                    selectedFilter === filter.id && styles.filterTabActive,
+                                ]}
+                                onPress={() => setSelectedFilter(filter.id)}
+                                activeOpacity={0.7}>
+                                <Icon
+                                    name={filter.icon}
+                                    size={18}
+                                    color={selectedFilter === filter.id ? '#00C896' : '#999999'}
+                                />
+                                <Text
+                                    style={[
+                                        styles.filterTabText,
+                                        selectedFilter === filter.id && styles.filterTabTextActive,
+                                    ]}>
+                                    {filter.label}
+                                </Text>
+                                {/* ✅ Show count badge */}
+                                <View style={[
+                                    styles.countBadge,
+                                    selectedFilter === filter.id && styles.countBadgeActive
                                 ]}>
-                                {filter.label}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                                    <Text style={[
+                                        styles.countText,
+                                        selectedFilter === filter.id && styles.countTextActive
+                                    ]}>
+                                        {count}
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
+                        );
+                    })}
                 </ScrollView>
             </SafeAreaView>
 
@@ -240,9 +312,17 @@ const TransactionHistoryScreen = ({ navigation }) => {
                 <FlatList
                     data={filteredTransactions}
                     renderItem={renderTransactionItem}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item) => item._id || item.id}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor="#00C896"
+                            colors={['#00C896']}
+                        />
+                    }
                 />
             ) : (
                 <View style={styles.emptyState}>
@@ -251,7 +331,9 @@ const TransactionHistoryScreen = ({ navigation }) => {
                     <Text style={styles.emptyStateText}>
                         {searchQuery
                             ? 'Try adjusting your search'
-                            : 'Your transaction history will appear here'}
+                            : selectedFilter !== 'all'
+                                ? `No ${selectedFilter} transactions yet`
+                                : 'Your transaction history will appear here'}
                     </Text>
                 </View>
             )}
@@ -263,6 +345,20 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#000000',
+    },
+
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#000000',
+    },
+
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#999999',
+        fontWeight: '600',
     },
 
     safeAreaTop: {
@@ -320,6 +416,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         marginLeft: 10,
         fontWeight: '500',
+        padding: 0,
     },
 
     // Filter Tabs
@@ -354,6 +451,29 @@ const styles = StyleSheet.create({
 
     filterTabTextActive: {
         color: '#00C896',
+    },
+
+    countBadge: {
+        backgroundColor: '#2A2A2A',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 10,
+        minWidth: 20,
+        alignItems: 'center',
+    },
+
+    countBadgeActive: {
+        backgroundColor: '#00C896',
+    },
+
+    countText: {
+        fontSize: 11,
+        color: '#999999',
+        fontWeight: '700',
+    },
+
+    countTextActive: {
+        color: '#000000',
     },
 
     // Transaction List
@@ -404,6 +524,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
+        flexWrap: 'wrap',
     },
 
     transactionDate: {
@@ -423,17 +544,16 @@ const styles = StyleSheet.create({
         color: '#666666',
     },
 
-    pendingBadge: {
-        backgroundColor: '#2A1F0D',
+    statusBadge: {
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 10,
     },
 
-    pendingText: {
+    statusText: {
         fontSize: 10,
-        color: '#FF9800',
         fontWeight: '700',
+        textTransform: 'uppercase',
     },
 
     transactionRight: {
