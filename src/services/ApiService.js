@@ -58,6 +58,7 @@ class ApiService {
                 success: false,
                 message: message,
                 statusCode: error.response.status,
+                errors: error.response.data?.errors || null,
             };
         } else if (error.request) {
             // Request made but no response
@@ -76,7 +77,9 @@ class ApiService {
 
     // ==================== SIGNUP APIs ====================
 
-    // Send Signup OTP
+    /**
+     * Send Signup OTP
+     */
     async sendSignupOTP(fullName, phoneNumber) {
         try {
             console.log(`📞 Sending Signup OTP to: ${phoneNumber}`);
@@ -95,7 +98,9 @@ class ApiService {
         }
     }
 
-    // Verify Signup OTP
+    /**
+     * Verify Signup OTP
+     */
     async verifySignupOTP(fullName, phoneNumber, otp) {
         try {
             console.log(`🔐 Verifying Signup OTP for: ${phoneNumber}`);
@@ -121,7 +126,9 @@ class ApiService {
         }
     }
 
-    // Resend Signup OTP
+    /**
+     * Resend Signup OTP
+     */
     async resendSignupOTP(fullName, phoneNumber) {
         try {
             console.log(`🔄 Resending Signup OTP to: ${phoneNumber}`);
@@ -142,7 +149,9 @@ class ApiService {
 
     // ==================== LOGIN APIs ====================
 
-    // Send Login OTP
+    /**
+     * Send Login OTP
+     */
     async sendLoginOTP(phoneNumber) {
         try {
             console.log(`📞 Sending Login OTP to: ${phoneNumber}`);
@@ -160,7 +169,9 @@ class ApiService {
         }
     }
 
-    // Verify Login OTP
+    /**
+     * Verify Login OTP
+     */
     async verifyLoginOTP(phoneNumber, otp) {
         try {
             console.log(`🔐 Verifying Login OTP for: ${phoneNumber}`);
@@ -185,7 +196,9 @@ class ApiService {
         }
     }
 
-    // Resend Login OTP
+    /**
+     * Resend Login OTP
+     */
     async resendLoginOTP(phoneNumber) {
         try {
             console.log(`🔄 Resending Login OTP to: ${phoneNumber}`);
@@ -205,7 +218,9 @@ class ApiService {
 
     // ==================== USER APIs ====================
 
-    // Get User Profile (Protected)
+    /**
+     * Get User Profile (Protected)
+     */
     async getUserProfile() {
         try {
             console.log(`👤 Fetching user profile`);
@@ -226,7 +241,9 @@ class ApiService {
         }
     }
 
-    // Logout
+    /**
+     * Logout
+     */
     async logout() {
         try {
             await AuthStorage.clearAuth();
@@ -237,9 +254,86 @@ class ApiService {
         }
     }
 
+    // ==================== BANK ACCOUNT MANAGEMENT APIs ====================
 
+    /**
+     * Get All Bank Accounts
+     */
+    async getBankAccounts() {
+        try {
+            console.log(`🏦 Fetching bank accounts`);
+            const response = await this.api.get(ENDPOINTS.GET_BANK_ACCOUNTS);
 
-    // Add these methods to your ApiService class
+            return {
+                success: true,
+                data: response.data.data,
+                message: 'Bank accounts fetched successfully',
+            };
+        } catch (error) {
+            return this.handleError(error);
+        }
+    }
+
+    /**
+     * Add Bank Account
+     */
+    async addBankAccount(bankData) {
+        try {
+            console.log(`➕ Adding bank account: ${bankData.bankName}`);
+            const response = await this.api.post(ENDPOINTS.ADD_BANK_ACCOUNT, {
+                bankName: bankData.bankName.trim(),
+                accountHolderName: bankData.accountHolderName.trim(),
+                accountNumber: bankData.accountNumber.trim(),
+                ifscCode: bankData.ifscCode.toUpperCase().trim(),
+                accountType: bankData.accountType || 'Savings',
+                isPrimary: bankData.isPrimary || false,
+            });
+
+            return {
+                success: true,
+                data: response.data.data,
+                message: response.data.message || 'Bank account added successfully',
+            };
+        } catch (error) {
+            return this.handleError(error);
+        }
+    }
+
+    /**
+     * Delete Bank Account
+     */
+    async deleteBankAccount(accountId) {
+        try {
+            console.log(`🗑️ Deleting bank account: ${accountId}`);
+            const response = await this.api.delete(`${ENDPOINTS.DELETE_BANK_ACCOUNT}/${accountId}`);
+
+            return {
+                success: true,
+                data: response.data.data,
+                message: response.data.message || 'Bank account deleted successfully',
+            };
+        } catch (error) {
+            return this.handleError(error);
+        }
+    }
+
+    /**
+     * Set Primary Bank Account
+     */
+    async setPrimaryBankAccount(accountId) {
+        try {
+            console.log(`⭐ Setting primary account: ${accountId}`);
+            const response = await this.api.patch(`${ENDPOINTS.SET_PRIMARY_BANK}/${accountId}/primary`);
+
+            return {
+                success: true,
+                data: response.data.data,
+                message: response.data.message || 'Primary account updated successfully',
+            };
+        } catch (error) {
+            return this.handleError(error);
+        }
+    }
 
     // ==================== WALLET MANAGEMENT APIs ====================
 
@@ -249,7 +343,7 @@ class ApiService {
     async getWalletBalance() {
         try {
             console.log(`💰 Fetching wallet balance`);
-            const response = await this.api.get('/wallet/balance');
+            const response = await this.api.get(ENDPOINTS.GET_WALLET_BALANCE);
 
             return {
                 success: true,
@@ -267,17 +361,41 @@ class ApiService {
     async addMoney(amount, utrNumber, gateway, paymentMethod = 'UPI') {
         try {
             console.log(`💵 Adding money: ₹${amount}, UTR: ${utrNumber}`);
-            const response = await this.api.post('/wallet/add-money', {
-                amount,
-                utrNumber,
-                gateway,
-                paymentMethod
+            const response = await this.api.post(ENDPOINTS.ADD_MONEY, {
+                amount: parseFloat(amount),
+                utrNumber: utrNumber.trim(),
+                gateway: gateway.trim(),
+                paymentMethod: paymentMethod.trim(),
             });
 
             return {
                 success: true,
                 data: response.data.data,
                 message: response.data.message || 'Payment submitted successfully',
+            };
+        } catch (error) {
+            return this.handleError(error);
+        }
+    }
+
+    /**
+     * Withdraw Money
+     */
+    async withdrawMoney(amount, bankDetails) {
+        try {
+            console.log(`🏦 Withdrawing: ₹${amount}`);
+            const response = await this.api.post(ENDPOINTS.WITHDRAW_MONEY, {
+                amount: parseFloat(amount),
+                accountNumber: bankDetails.accountNumber.trim(),
+                ifscCode: bankDetails.ifscCode.toUpperCase().trim(),
+                accountHolderName: bankDetails.accountHolderName.trim(),
+                bankName: bankDetails.bankName.trim(),
+            });
+
+            return {
+                success: true,
+                data: response.data.data,
+                message: response.data.message || 'Withdrawal request submitted successfully',
             };
         } catch (error) {
             return this.handleError(error);
@@ -292,20 +410,20 @@ class ApiService {
             console.log(`📜 Fetching transactions (page ${page})`);
 
             const params = new URLSearchParams({
-                page,
-                limit,
-                ...filters
+                page: page.toString(),
+                limit: limit.toString(),
+                ...filters,
             });
 
-            const response = await this.api.get(`/wallet/transactions?${params}`);
+            const response = await this.api.get(`${ENDPOINTS.GET_TRANSACTIONS}?${params}`);
 
             return {
                 success: true,
                 data: response.data.data.transactions || [],
                 pagination: {
-                    totalPages: response.data.data.totalPages,
-                    currentPage: response.data.data.currentPage,
-                    totalTransactions: response.data.data.totalTransactions
+                    totalPages: response.data.data.totalPages || 0,
+                    currentPage: response.data.data.currentPage || 1,
+                    totalTransactions: response.data.data.totalTransactions || 0,
                 },
                 message: 'Transactions fetched successfully',
             };
@@ -313,28 +431,6 @@ class ApiService {
             return this.handleError(error);
         }
     }
-
-    /**
-     * Withdraw Money
-     */
-    async withdrawMoney(amount, bankDetails) {
-        try {
-            console.log(`🏦 Withdrawing: ₹${amount}`);
-            const response = await this.api.post('/wallet/withdraw', {
-                amount,
-                ...bankDetails
-            });
-
-            return {
-                success: true,
-                data: response.data.data,
-                message: response.data.message || 'Withdrawal request submitted',
-            };
-        } catch (error) {
-            return this.handleError(error);
-        }
-    }
-
 }
 
 export default new ApiService();

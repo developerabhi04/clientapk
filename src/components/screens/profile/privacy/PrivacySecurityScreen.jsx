@@ -10,7 +10,7 @@ import {
     Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS } from '../../../constants/colors';
+import { COLORS } from '../../../../constants/colors';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const PrivacySecurityScreen = ({ navigation }) => {

@@ -20,15 +20,15 @@ const FILTER_OPTIONS = [
     { id: 'all', label: 'All', icon: 'view-grid' },
     { id: 'credit', label: 'Credit', icon: 'plus-circle' },
     { id: 'debit', label: 'Debit', icon: 'minus-circle' },
-    { id: 'pending', label: 'Pending', icon: 'clock-outline' },
     { id: 'withdrawal', label: 'Withdrawal', icon: 'bank-transfer-out' },
+    { id: 'pending', label: 'Pending', icon: 'clock-outline' },
 ];
 
 const TransactionHistoryScreen = ({ navigation }) => {
     const [selectedFilter, setSelectedFilter] = useState('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [transactions, setTransactions] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
     // ✅ Fetch transactions on screen focus
@@ -48,6 +48,13 @@ const TransactionHistoryScreen = ({ navigation }) => {
 
             if (response.success) {
                 console.log('✅ Transactions fetched:', response.data.length);
+                console.log('📊 Transaction breakdown:', {
+                    total: response.data.length,
+                    credit: response.data.filter(t => t.type === 'credit').length,
+                    debit: response.data.filter(t => t.type === 'debit').length,
+                    withdrawals: response.data.filter(t => t.category === 'withdrawal').length,
+                    pending: response.data.filter(t => t.status === 'pending').length,
+                });
                 setTransactions(response.data);
             } else {
                 console.error('❌ Failed to fetch transactions:', response.message);
@@ -55,7 +62,7 @@ const TransactionHistoryScreen = ({ navigation }) => {
         } catch (error) {
             console.error('❌ Error fetching transactions:', error);
         } finally {
-            setLoading(false);
+            // setLoading(false);
             setRefreshing(false);
         }
     };
@@ -68,12 +75,12 @@ const TransactionHistoryScreen = ({ navigation }) => {
 
     // ✅ Filter transactions based on selected filter and search query
     const filteredTransactions = transactions.filter((transaction) => {
-        // Filter by type/status
+        // ✅ FIXED: Filter by type/status/category
         const matchesFilter =
             selectedFilter === 'all' ||
             (selectedFilter === 'credit' && transaction.type === 'credit') ||
             (selectedFilter === 'debit' && transaction.type === 'debit') ||
-            (selectedFilter === 'withdrawal' && transaction.type === 'withdrawal') ||
+            (selectedFilter === 'withdrawal' && transaction.category === 'withdrawal') || // ✅ Fixed this line
             (selectedFilter === 'pending' && transaction.status === 'pending');
 
         // Filter by search query
@@ -81,6 +88,8 @@ const TransactionHistoryScreen = ({ navigation }) => {
             searchQuery === '' ||
             transaction.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             transaction.paymentDetails?.utrNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            transaction.withdrawalDetails?.utrNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            transaction.withdrawalDetails?.bankName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             transaction.tradeDetails?.stockSymbol?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             transaction.category?.toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -203,14 +212,14 @@ const TransactionHistoryScreen = ({ navigation }) => {
     };
 
     // ✅ Show loading state
-    if (loading) {
-        return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#00C896" />
-                <Text style={styles.loadingText}>Loading transactions...</Text>
-            </View>
-        );
-    }
+    // if (loading) {
+    //     return (
+    //         <View style={styles.loadingContainer}>
+    //             <ActivityIndicator size="large" color="#00C896" />
+    //             <Text style={styles.loadingText}>Loading transactions...</Text>
+    //         </View>
+    //     );
+    // }
 
     return (
         <View style={styles.container}>
@@ -228,7 +237,7 @@ const TransactionHistoryScreen = ({ navigation }) => {
                     <TouchableOpacity
                         style={styles.downloadButton}
                         onPress={() => console.log('Download feature coming soon')}>
-                        <Icon name="download" size={22} color="#FFFFFF" />
+                        {/* <Icon name="download" size={22} color="#FFFFFF" /> */}
                     </TouchableOpacity>
                 </View>
 
@@ -237,7 +246,7 @@ const TransactionHistoryScreen = ({ navigation }) => {
                     <Icon name="magnify" size={20} color="#999999" />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Search transactions, UTR, stocks..."
+                        placeholder="Search transactions, UTR, bank..."
                         placeholderTextColor="#666666"
                         value={searchQuery}
                         onChangeText={setSearchQuery}
@@ -263,11 +272,13 @@ const TransactionHistoryScreen = ({ navigation }) => {
                             count = transactions.filter(t => t.type === 'credit').length;
                         } else if (filter.id === 'debit') {
                             count = transactions.filter(t => t.type === 'debit').length;
+                        } else if (filter.id === 'withdrawal') {
+                            // ✅ Fixed: Count withdrawals by category
+                            count = transactions.filter(t => t.category === 'withdrawal').length;
                         } else if (filter.id === 'pending') {
                             count = transactions.filter(t => t.status === 'pending').length;
-                        } else if (filter.id === 'withdrawal') {
-                            count = transactions.filter(t => t.type === 'withdrawal').length;
                         }
+
                         return (
                             <TouchableOpacity
                                 key={filter.id}
@@ -335,6 +346,16 @@ const TransactionHistoryScreen = ({ navigation }) => {
                                 ? `No ${selectedFilter} transactions yet`
                                 : 'Your transaction history will appear here'}
                     </Text>
+                    {(searchQuery || selectedFilter !== 'all') && (
+                        <TouchableOpacity
+                            style={styles.clearButton}
+                            onPress={() => {
+                                setSearchQuery('');
+                                setSelectedFilter('all');
+                            }}>
+                            <Text style={styles.clearButtonText}>Clear Filters</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             )}
         </View>
@@ -589,6 +610,20 @@ const styles = StyleSheet.create({
         color: '#999999',
         textAlign: 'center',
         lineHeight: 20,
+        marginBottom: 20,
+    },
+
+    clearButton: {
+        backgroundColor: '#00C896',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 10,
+    },
+
+    clearButtonText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#FFFFFF',
     },
 });
 

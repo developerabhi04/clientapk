@@ -7,7 +7,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 // Import Screens
 import HomeScreen from '../components/screens/HomeScreen';
 import HistoryScreen from '../components/screens/profile/HistoryScreen';
-import ProfileScreen from '../components/screens/profile/ProfileScreen';
+import ProfileScreen from '../components/screens/profile/profile/ProfileScreen';
 import PortfolioScreen from '../components/screens/portfolio/PortfolioScreen';
 import OrderScreen from '../components/screens/orders/OrderScreen';
 

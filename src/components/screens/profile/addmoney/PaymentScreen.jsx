@@ -15,8 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Clipboard from '@react-native-clipboard/clipboard';
-import ApiService from '../../../services/ApiService';
-import { PAYMENT_GATEWAYS } from '../../../config/api.config';
+import ApiService from '../../../../services/ApiService';
+import { PAYMENT_GATEWAYS } from '../../../../config/api.config';
 
 const PaymentScreen = ({ navigation, route }) => {
     const { amount } = route?.params || { amount: 1000 };

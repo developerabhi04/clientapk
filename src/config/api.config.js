@@ -11,24 +11,30 @@ export const ENDPOINTS = {
     SEND_LOGIN_OTP: '/auth/login/send-otp',
     VERIFY_LOGIN_OTP: '/auth/login/verify-otp',
     RESEND_LOGIN_OTP: '/auth/login/resend-otp',
-    
+
     // Signup routes
     SEND_SIGNUP_OTP: '/auth/signup/send-otp',
     VERIFY_SIGNUP_OTP: '/auth/signup/verify-otp',
     RESEND_SIGNUP_OTP: '/auth/signup/resend-otp',
-    
+
     // User profile
-    GET_USER_PROFILE: '/auth/profile',
-    UPDATE_USER_PROFILE: '/auth/profile',
-    CHECK_PHONE_EXISTS: '/auth/check-phone', // Optional
-    
+    GET_USER_PROFILE: '/user/profile',
+    UPDATE_USER_PROFILE: '/user/profile',
+    CHECK_PHONE_EXISTS: '/user/check-phone',
+
     // ==================== WALLET ENDPOINTS ====================
     GET_WALLET_BALANCE: '/wallet/balance',
     ADD_MONEY: '/wallet/add-money',
     WITHDRAW_MONEY: '/wallet/withdraw',
     GET_TRANSACTIONS: '/wallet/transactions',
-    
-    // ==================== BANK & KYC ENDPOINTS ====================
+
+    // ==================== BANK ACCOUNT ENDPOINTS ====================
+    GET_BANK_ACCOUNTS: '/user/bank-accounts',
+    ADD_BANK_ACCOUNT: '/user/bank-accounts',
+    DELETE_BANK_ACCOUNT: '/user/bank-accounts', // + /{accountId}
+    SET_PRIMARY_BANK: '/user/bank-accounts', // + /{accountId}/primary
+
+    // ==================== KYC ENDPOINTS ====================
     UPDATE_BANK_DETAILS: '/auth/bank-details',
     UPDATE_PAN_CARD: '/auth/pan-card',
 };

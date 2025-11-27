@@ -75,9 +75,6 @@ const HomeScreen = ({ navigation }) => {
                             <Icon name="bell-outline" size={20} color={theme.text} />
                             <View style={styles.notificationBadge} />
                         </TouchableOpacity>
-                        {/* <TouchableOpacity style={styles.profileButton} onPress={() => navigation.navigate('Profile')}>
-                            <Icon name="account" size={18} color="#FFF" />
-                        </TouchableOpacity> */}
                     </View>
 
                 </View>

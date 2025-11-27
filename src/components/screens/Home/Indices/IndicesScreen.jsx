@@ -13,7 +13,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // Data remains the same...
 const FEATURED_INDICES = [
-  { id: 'feat-1', name: 'NIFTY 50', value: '19,435.30', change: '+1.24%', isPositive: true, icon: 'chart-line-variant' },
+  { id: 'feat-1', name: 'NIFTY 0', value: '19,439.30', change: '+1.24%', isPositive: true, icon: 'chart-line-variant' },
   { id: 'feat-2', name: 'SENSEX', value: '64,832.55', change: '+0.98%', isPositive: true, icon: 'trending-up' },
   { id: 'feat-3', name: 'BANK NIFTY', value: '43,567.80', change: '+2.14%', isPositive: true, icon: 'bank' },
   { id: 'feat-4', name: 'NIFTY IT', value: '30,234.90', change: '-0.45%', isPositive: false, icon: 'laptop' },
@@ -22,8 +22,8 @@ const FEATURED_INDICES = [
 ];
 
 const INDIAN_INDICES = [
-  { id: 'in-1', name: 'NIFTY 50', value: '19,435.30', change: '+1.24%', isPositive: true },
-  { id: 'in-2', name: 'SENSEX', value: '64,832.55', change: '+0.98%', isPositive: true },
+  { id: 'in-1', name: 'NIFTY 50', value: '19,43', change: '+1.24%', isPositive: true },
+  { id: 'in-2', name: 'SENSEX', value: '64,83.55', change: '+0.98%', isPositive: true },
   { id: 'in-3', name: 'BANK NIFTY', value: '43,567.80', change: '+2.14%', isPositive: true },
   { id: 'in-4', name: 'NIFTY IT', value: '30,234.90', change: '-0.45%', isPositive: false },
   { id: 'in-5', name: 'NIFTY PHARMA', value: '14,876.25', change: '+1.78%', isPositive: true },
